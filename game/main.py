@@ -1,6 +1,7 @@
 
 #!/usr/bin/env python3
 import asyncio
+import base64
 import pygame
 import random
 import json
@@ -155,7 +156,8 @@ DIFFICULTIES = ["Easy", "Medium", "Hard", "Expert", "College Beast"]
 SYMBOLS = ["^", "(", ")", "+", "-", "*", "/", "=", "<", ">", "!=", ",", ".", "sqrt(", "pi"]
 
 SOUNDS = {}
-SOUNDS = {}
+WEB_SOUNDS = {}
+WEB_AUDIO_READY = False
 AUDIO_UNLOCKED = False
 
 def ensure_settings(progress):
@@ -170,9 +172,20 @@ def ensure_settings(progress):
     return settings
 
 def apply_audio_settings(progress):
+    settings = ensure_settings(progress)
+    if sys.platform == "emscripten":
+        try:
+            music = WEB_SOUNDS.get("music")
+            if music is not None:
+                music.volume = float(settings["music_volume"])
+            for name, sound in WEB_SOUNDS.items():
+                if name != "music":
+                    sound.volume = float(settings["sfx_volume"])
+        except Exception:
+            pass
+        return
     if not AUDIO_OK:
         return
-    settings = ensure_settings(progress)
     try:
         pygame.mixer.music.set_volume(float(settings["music_volume"]))
         for sound in SOUNDS.values():
@@ -180,8 +193,72 @@ def apply_audio_settings(progress):
     except Exception:
         pass
 
+def _web_audio_element(path, volume, loop=False):
+    try:
+        from js import document
+        data = Path(path).read_bytes()
+        encoded = base64.b64encode(data).decode("ascii")
+        audio = document.createElement("audio")
+        audio.src = f"data:audio/ogg;base64,{encoded}"
+        audio.preload = "auto"
+        audio.loop = loop
+        audio.volume = float(volume)
+        audio.style.display = "none"
+        document.body.appendChild(audio)
+        return audio
+    except Exception:
+        return None
+
+def init_web_audio(progress):
+    global WEB_AUDIO_READY
+    if sys.platform != "emscripten":
+        return False
+    if WEB_AUDIO_READY:
+        return True
+    try:
+        settings = ensure_settings(progress)
+        for name in ("move", "world_move", "select", "correct", "wrong", "hint", "boss", "victory"):
+            audio = _web_audio_element(
+                Path("audio") / f"{name}.ogg",
+                settings["sfx_volume"],
+                False
+            )
+            if audio is not None:
+                WEB_SOUNDS[name] = audio
+
+        music = _web_audio_element(
+            Path("audio") / "bloody_math_theme.ogg",
+            settings["music_volume"],
+            True
+        )
+        if music is not None:
+            WEB_SOUNDS["music"] = music
+
+        WEB_AUDIO_READY = bool(WEB_SOUNDS)
+        return WEB_AUDIO_READY
+    except Exception:
+        WEB_AUDIO_READY = False
+        return False
+
+def _web_play(audio, volume=None):
+    if audio is None:
+        return False
+    try:
+        if volume is not None:
+            audio.volume = float(volume)
+        audio.currentTime = 0
+        result = audio.play()
+        return True
+    except Exception:
+        return False
+
 def init_audio(progress):
     global AUDIO_OK
+    if sys.platform == "emscripten":
+        # Browser audio is handled by native HTMLAudio elements. The first
+        # call is made from a real browser input event, satisfying autoplay rules.
+        return init_web_audio(progress)
+
     try:
         if pygame.mixer.get_init() is None:
             pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
@@ -193,31 +270,19 @@ def init_audio(progress):
     for name in ("move", "world_move", "select", "correct", "wrong", "hint", "boss", "victory"):
         if name in SOUNDS:
             continue
-        if sys.platform == "emscripten":
-            p = f"audio/{name}.ogg"
-            exists = True
-        else:
-            p = AUDIO_DIR / f"{name}.ogg"
-            exists = p.exists()
-        if exists:
+        p = AUDIO_DIR / f"{name}.ogg"
+        if p.exists():
             try:
-                SOUNDS[name] = pygame.mixer.Sound(p)
+                SOUNDS[name] = pygame.mixer.Sound(str(p))
             except Exception:
                 pass
 
     apply_audio_settings(progress)
 
-    # With --ume_block=1, pygbag waits for the browser's media-engagement
-    # gesture before starting the Python app, so music can safely start here.
-    if sys.platform == "emscripten":
-        theme = "audio/bloody_math_theme.ogg"
-        theme_exists = True
-    else:
-        theme = AUDIO_DIR / "bloody_math_theme.ogg"
-        theme_exists = theme.exists()
-    if theme_exists:
+    theme = AUDIO_DIR / "bloody_math_theme.ogg"
+    if theme.exists():
         try:
-            pygame.mixer.music.load(theme)
+            pygame.mixer.music.load(str(theme))
             pygame.mixer.music.set_volume(float(ensure_settings(progress)["music_volume"]))
             pygame.mixer.music.play(-1)
         except Exception:
@@ -230,15 +295,44 @@ def unlock_audio(progress=None):
     progress = progress or ACTIVE_PROGRESS
     if progress is None:
         return
+
+    if sys.platform == "emscripten":
+        if init_web_audio(progress):
+            settings = ensure_settings(progress)
+            music = WEB_SOUNDS.get("music")
+            if music is not None:
+                _web_play(music, settings["music_volume"])
+            AUDIO_UNLOCKED = True
+        return
+
     if not AUDIO_UNLOCKED:
         init_audio(progress)
     AUDIO_UNLOCKED = AUDIO_OK
 
 def get_events():
-    return pygame.event.get()
+    events = pygame.event.get()
+    if not AUDIO_UNLOCKED:
+        for e in events:
+            if e.type in (
+                pygame.MOUSEBUTTONDOWN,
+                pygame.MOUSEBUTTONUP,
+                pygame.KEYDOWN,
+                pygame.JOYBUTTONDOWN,
+                pygame.FINGERDOWN,
+            ):
+                unlock_audio()
+                break
+    return events
 
 def play_sfx(name):
     try:
+        if sys.platform == "emscripten":
+            if not WEB_AUDIO_READY and ACTIVE_PROGRESS is not None:
+                init_web_audio(ACTIVE_PROGRESS)
+            sound = WEB_SOUNDS.get(name)
+            if sound is not None:
+                _web_play(sound, ensure_settings(ACTIVE_PROGRESS)["sfx_volume"])
+            return
         if AUDIO_OK and name in SOUNDS:
             SOUNDS[name].play()
     except Exception:
@@ -1880,7 +1974,8 @@ async def run():
     ACTIVE_PROGRESS=progress
     ensure_settings(progress)
     apply_display_mode(progress)
-    init_audio(progress)
+    if sys.platform != "emscripten":
+        init_audio(progress)
     while True:
         result=await main_menu(progress)
         if result=="quit":break
