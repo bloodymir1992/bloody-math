@@ -30,7 +30,7 @@ jobs:
         run: python -m pip install --upgrade pygbag
 
       - name: Build WebAssembly game
-        run: python -m pygbag --build --title "Bloody Math: Algebra Quest" game
+        run: 'python -m pygbag --build --title "Bloody Math: Algebra Quest" game'
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
