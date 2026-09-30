@@ -153,6 +153,7 @@ DIFFICULTIES = ["Easy", "Medium", "Hard", "Expert", "College Beast"]
 SYMBOLS = ["^", "(", ")", "+", "-", "*", "/", "=", "<", ">", "!=", ",", ".", "sqrt(", "pi"]
 
 SOUNDS = {}
+AUDIO_UNLOCKED = False
 
 def ensure_settings(progress):
     settings = progress.setdefault("settings", {})
@@ -177,20 +178,71 @@ def apply_audio_settings(progress):
         pass
 
 def init_audio(progress):
-    if not AUDIO_OK:
-        return
+    global AUDIO_OK
     try:
-        for name in ("move", "world_move", "select", "correct", "wrong", "hint", "boss", "victory"):
-            p = AUDIO_DIR / f"{name}.ogg"
-            if p.exists():
+        if pygame.mixer.get_init() is None:
+            pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
+        AUDIO_OK = True
+    except Exception:
+        AUDIO_OK = False
+        return False
+
+    # Load each asset independently so one bad asset cannot disable all audio.
+    for name in ("move", "world_move", "select", "correct", "wrong", "hint", "boss", "victory"):
+        if name in SOUNDS:
+            continue
+        p = AUDIO_DIR / f"{name}.ogg"
+        if p.exists():
+            try:
                 SOUNDS[name] = pygame.mixer.Sound(str(p))
-        apply_audio_settings(progress)
-        theme = AUDIO_DIR / "bloody_math_theme.ogg"
-        if theme.exists():
+            except Exception:
+                pass
+
+    apply_audio_settings(progress)
+
+    theme = AUDIO_DIR / "bloody_math_theme.ogg"
+    if theme.exists():
+        try:
             pygame.mixer.music.load(str(theme))
             pygame.mixer.music.play(-1)
+        except Exception:
+            # Browser autoplay policies can block playback until the first
+            # real user interaction. unlock_audio() retries after that input.
+            pass
+    return True
+
+def unlock_audio(progress=None):
+    global AUDIO_UNLOCKED
+    if AUDIO_UNLOCKED:
+        return
+    progress = progress or ACTIVE_PROGRESS
+    if progress is None:
+        return
+    if not init_audio(progress):
+        return
+    try:
+        if not pygame.mixer.music.get_busy():
+            theme = AUDIO_DIR / "bloody_math_theme.ogg"
+            if theme.exists():
+                pygame.mixer.music.load(str(theme))
+                pygame.mixer.music.play(-1)
+        AUDIO_UNLOCKED = True
     except Exception:
         pass
+
+def get_events():
+    # Pygbag/browser audio must be unlocked from a real user gesture.
+    events = get_events()
+    for e in events:
+        if e.type in (
+            pygame.MOUSEBUTTONDOWN,
+            pygame.KEYDOWN,
+            pygame.JOYBUTTONDOWN,
+            pygame.FINGERDOWN,
+        ):
+            unlock_audio()
+            break
+    return events
 
 def play_sfx(name):
     try:
@@ -235,7 +287,7 @@ async def difficulty_select(progress, automatic=False):
             else:
                 rects.append(pygame.Rect(290+(i-3)*400,425,360,78))
         back_rect=pygame.Rect(WIDTH//2-100,650,200,46)
-        for e in pygame.event.get():
+        for e in get_events():
             if e.type == pygame.QUIT:
                 return None
             if e.type == pygame.MOUSEMOTION:
@@ -1226,7 +1278,7 @@ async def main_menu(progress):
     idx=0
     while True:
         rects=[pygame.Rect(WIDTH//2-190,275+i*62,380,48) for i in range(len(items))]
-        for e in pygame.event.get():
+        for e in get_events():
             if e.type==pygame.VIDEORESIZE and not ensure_settings(progress).get("fullscreen",False):
                 ensure_settings(progress)["window_size"]=[max(720,e.w),max(500,e.h)]
                 save_progress(progress)
@@ -1284,7 +1336,7 @@ async def world_select(progress, mode):
     while True:
         rects=[pygame.Rect(46,178+i*68,760,52) for i in range(len(WORLD_DATA))]
         back_rect=pygame.Rect(1000,600,170,48)
-        for e in pygame.event.get():
+        for e in get_events():
             if e.type==pygame.VIDEORESIZE and not ensure_settings(progress).get("fullscreen",False):
                 ensure_settings(progress)["window_size"]=[max(720,e.w),max(500,e.h)]
                 save_progress(progress)
@@ -1359,7 +1411,7 @@ async def topic_select(progress, world_idx, mode):
     while True:
         rects=[pygame.Rect(46,165+i*48,900,40) for i in range(len(entries))]
         back_rect=pygame.Rect(1000,560,180,48)
-        for e in pygame.event.get():
+        for e in get_events():
             if e.type==pygame.VIDEORESIZE and not ensure_settings(progress).get("fullscreen",False):
                 ensure_settings(progress)["window_size"]=[max(720,e.w),max(500,e.h)]
                 save_progress(progress)
@@ -1406,7 +1458,7 @@ async def lesson_screen(topic):
     intro,steps=lesson_for(topic)
     while True:
         continue_rect=pygame.Rect(WIDTH//2-150,710,300,44)
-        for e in pygame.event.get():
+        for e in get_events():
             if e.type==pygame.QUIT:return
             if e.type==pygame.MOUSEBUTTONDOWN and e.button==1 and continue_rect.collidepoint(logical_pos(e.pos)):
                 play_sfx("select"); return
@@ -1489,7 +1541,7 @@ async def problem_screen(topic,p,mode,qnum,total,lives,score,combo,boss_title=No
             row=i//8; col=i%8
             symbol_rects.append((pygame.Rect(sx+col*105, sy+row*50, 94, 40), sym))
 
-        for e in pygame.event.get():
+        for e in get_events():
             if e.type==pygame.QUIT:return {"correct":False,"used_hint":used_hint}
             if e.type==pygame.MOUSEBUTTONDOWN and e.button==1 and not submitted:
                 for rect,sym in symbol_rects:
@@ -1574,7 +1626,7 @@ async def result_screen(title,score,combo,lives=None,boss=False):
     play_sfx("victory" if (not boss or (lives and lives>0)) else "wrong")
     while True:
         continue_rect=pygame.Rect(WIDTH//2-170,590,340,50)
-        for e in pygame.event.get():
+        for e in get_events():
             if e.type==pygame.QUIT:return
             if e.type==pygame.MOUSEBUTTONDOWN and e.button==1 and continue_rect.collidepoint(logical_pos(e.pos)):
                 play_sfx("select"); return
@@ -1597,7 +1649,7 @@ async def progress_screen(progress):
         left_rect=pygame.Rect(430,730,80,42)
         right_rect=pygame.Rect(770,730,80,42)
         back_rect=pygame.Rect(555,730,170,42)
-        for e in pygame.event.get():
+        for e in get_events():
             if e.type==pygame.VIDEORESIZE and not ensure_settings(progress).get("fullscreen",False):
                 ensure_settings(progress)["window_size"]=[max(720,e.w),max(500,e.h)]
                 save_progress(progress)
@@ -1664,7 +1716,7 @@ async def settings_screen(progress):
         scale_rect=pygame.Rect(420,row_y[4]-3,620,42)
         back_rect=pygame.Rect(480,655,320,50)
 
-        for e in pygame.event.get():
+        for e in get_events():
             if e.type == pygame.QUIT:
                 return
 
@@ -1817,7 +1869,7 @@ async def settings_screen(progress):
 
 async def info_screen(title,lines):
     while True:
-        for e in pygame.event.get():
+        for e in get_events():
             if e.type==pygame.QUIT:return
             if e.type==pygame.KEYDOWN:return
         draw_background();header(title)
