@@ -193,10 +193,15 @@ def init_audio(progress):
     for name in ("move", "world_move", "select", "correct", "wrong", "hint", "boss", "victory"):
         if name in SOUNDS:
             continue
-        p = AUDIO_DIR / f"{name}.ogg"
-        if p.exists():
+        if sys.platform == "emscripten":
+            p = f"audio/{name}.ogg"
+            exists = True
+        else:
+            p = AUDIO_DIR / f"{name}.ogg"
+            exists = p.exists()
+        if exists:
             try:
-                SOUNDS[name] = pygame.mixer.Sound(str(p))
+                SOUNDS[name] = pygame.mixer.Sound(p)
             except Exception:
                 pass
 
@@ -204,10 +209,15 @@ def init_audio(progress):
 
     # With --ume_block=1, pygbag waits for the browser's media-engagement
     # gesture before starting the Python app, so music can safely start here.
-    theme = AUDIO_DIR / "bloody_math_theme.ogg"
-    if theme.exists():
+    if sys.platform == "emscripten":
+        theme = "audio/bloody_math_theme.ogg"
+        theme_exists = True
+    else:
+        theme = AUDIO_DIR / "bloody_math_theme.ogg"
+        theme_exists = theme.exists()
+    if theme_exists:
         try:
-            pygame.mixer.music.load(str(theme))
+            pygame.mixer.music.load(theme)
             pygame.mixer.music.set_volume(float(ensure_settings(progress)["music_volume"]))
             pygame.mixer.music.play(-1)
         except Exception:
