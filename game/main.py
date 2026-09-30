@@ -1427,7 +1427,8 @@ async def topic_select(progress, world_idx, mode):
                     play_sfx("select"); return None
                 for i,r in enumerate(rects):
                     if r.collidepoint(logical_pos(e.pos)):
-                        activate(i); break
+                        await activate(i)
+                        break
             if e.type==pygame.KEYDOWN:
                 if e.key==pygame.K_F11:
                     toggle_fullscreen(progress)
@@ -1435,7 +1436,8 @@ async def topic_select(progress, world_idx, mode):
                 if e.key in (pygame.K_UP,pygame.K_w):idx=(idx-1)%len(entries); play_sfx("move")
                 elif e.key in (pygame.K_DOWN,pygame.K_s):idx=(idx+1)%len(entries); play_sfx("move")
                 elif e.key==pygame.K_ESCAPE:return None
-                elif e.key in (pygame.K_RETURN,pygame.K_SPACE):activate(idx)
+                elif e.key in (pygame.K_RETURN,pygame.K_SPACE):
+                    await activate(idx)
         draw_background();header(f"{wn.upper()} — {name}")
         draw_text("SELECT TOPIC", BIG, WHITE, 46,110)
         for i,label in enumerate(entries):
