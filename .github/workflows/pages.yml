@@ -40,7 +40,7 @@ jobs:
           done
 
       - name: Build WebAssembly game
-        run: 'python -m pygbag --build --width 1280 --height 800 --ume_block 1 --title "Bloody Math: Algebra Quest" game'
+        run: 'python -m pygbag --build --no_opt --width 1280 --height 800 --ume_block 1 --title "Bloody Math: Algebra Quest" game'
 
       - name: Configure Pages
         uses: actions/configure-pages@v5
