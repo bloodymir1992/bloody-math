@@ -159,6 +159,7 @@ SOUNDS = {}
 WEB_SOUNDS = {}
 WEB_AUDIO_READY = False
 AUDIO_UNLOCKED = False
+WEB_AUDIO_EVENT_CALLBACK = None
 
 def ensure_settings(progress):
     settings = progress.setdefault("settings", {})
@@ -209,8 +210,24 @@ def _web_audio_element(path, volume, loop=False):
     except Exception:
         return None
 
+def _web_user_gesture(event=None):
+    """Run directly from a DOM gesture so Edge grants media playback."""
+    global AUDIO_UNLOCKED
+    if sys.platform != "emscripten":
+        return
+    try:
+        settings = ensure_settings(ACTIVE_PROGRESS)
+        music = WEB_SOUNDS.get("music")
+        if music is not None:
+            music.volume = float(settings["music_volume"])
+            music.currentTime = 0
+            music.play()
+            AUDIO_UNLOCKED = True
+    except Exception:
+        pass
+
 def init_web_audio(progress):
-    global WEB_AUDIO_READY
+    global WEB_AUDIO_READY, WEB_AUDIO_EVENT_CALLBACK
     if sys.platform != "emscripten":
         return False
     if WEB_AUDIO_READY:
@@ -235,6 +252,16 @@ def init_web_audio(progress):
             WEB_SOUNDS["music"] = music
 
         WEB_AUDIO_READY = bool(WEB_SOUNDS)
+
+        # IMPORTANT: pygame's event queue reaches Python after the browser's
+        # transient user-activation window. Register directly with Pygbag's
+        # DOM EventTarget so Edge/Chrome sees play() inside the real gesture.
+        if WEB_AUDIO_READY and WEB_AUDIO_EVENT_CALLBACK is None:
+            import platform
+            WEB_AUDIO_EVENT_CALLBACK = _web_user_gesture
+            platform.EventTarget.addEventListener(None, "pointerdown", WEB_AUDIO_EVENT_CALLBACK)
+            platform.EventTarget.addEventListener(None, "keydown", WEB_AUDIO_EVENT_CALLBACK)
+
         return WEB_AUDIO_READY
     except Exception:
         WEB_AUDIO_READY = False
@@ -1974,7 +2001,9 @@ async def run():
     ACTIVE_PROGRESS=progress
     ensure_settings(progress)
     apply_display_mode(progress)
-    if sys.platform != "emscripten":
+    if sys.platform == "emscripten":
+        init_web_audio(progress)
+    else:
         init_audio(progress)
     while True:
         result=await main_menu(progress)
