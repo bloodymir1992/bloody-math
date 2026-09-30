@@ -10,11 +10,11 @@ from pathlib import Path
 
 pygame.init()
 pygame.joystick.init()
-try:
-    pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
-    AUDIO_OK = True
-except Exception:
-    AUDIO_OK = False
+
+# Do not initialize SDL_mixer at import time on WebAssembly.
+# Pygbag/browser audio becomes available after the display is created and
+# the browser's media-engagement gate has been satisfied.
+AUDIO_OK = False
 
 WIDTH, HEIGHT = 1280, 800
 FPS = 60
