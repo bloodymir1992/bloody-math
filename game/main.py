@@ -1483,7 +1483,7 @@ async def topic_select(progress, world_idx, mode):
                         if idx != i: play_sfx("move")
                         idx=i
                         break
-            if e.type==pygame.MOUSEBUTTONDOWN and e.button==1:
+            if e.type==pygame.MOUSEBUTTONUP and e.button==1:
                 if back_rect.collidepoint(logical_pos(e.pos)):
                     play_sfx("select"); return None
                 for i,r in enumerate(rects):
