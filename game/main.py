@@ -149,13 +149,12 @@ HUGE = pygame.font.Font(None, 82)
 SAVE_DIR = Path.home() / ".local" / "share" / "bloody-math"
 SAVE_FILE = SAVE_DIR / "progress.json"
 
-AUDIO_DIR = Path(__file__).resolve().parent / "audio"
+AUDIO_DIR = Path(__file__).parent / "audio"
 DIFFICULTIES = ["Easy", "Medium", "Hard", "Expert", "College Beast"]
 SYMBOLS = ["^", "(", ")", "+", "-", "*", "/", "=", "<", ">", "!=", ",", ".", "sqrt(", "pi"]
 
 SOUNDS = {}
-WEB_AUDIO = {}
-WEB_AUDIO_READY = False
+SOUNDS = {}
 AUDIO_UNLOCKED = False
 
 def ensure_settings(progress):
@@ -180,47 +179,6 @@ def apply_audio_settings(progress):
     except Exception:
         pass
 
-def init_web_audio(progress):
-    """Browser-native audio fallback for the Pygbag build."""
-    global WEB_AUDIO_READY
-    if sys.platform != "emscripten" or WEB_AUDIO_READY:
-        return
-    try:
-        from js import document
-        settings = ensure_settings(progress)
-        names = ("move", "world_move", "select", "correct", "wrong", "hint", "boss", "victory")
-        for name in names:
-            audio = document.createElement("audio")
-            audio.src = f"audio/{name}.ogg"
-            audio.preload = "auto"
-            audio.volume = float(settings["sfx_volume"])
-            audio.style.display = "none"
-            document.body.appendChild(audio)
-            WEB_AUDIO[name] = audio
-
-        music = document.createElement("audio")
-        music.src = "audio/bloody_math_theme.ogg"
-        music.preload = "auto"
-        music.loop = True
-        music.volume = float(settings["music_volume"])
-        music.style.display = "none"
-        document.body.appendChild(music)
-        WEB_AUDIO["music"] = music
-        WEB_AUDIO_READY = True
-    except Exception:
-        WEB_AUDIO_READY = False
-
-def play_web_music():
-    if sys.platform != "emscripten" or not WEB_AUDIO_READY:
-        return
-    try:
-        music = WEB_AUDIO.get("music")
-        if music is not None:
-            music.volume = float(ensure_settings(ACTIVE_PROGRESS)["music_volume"])
-            music.play()
-    except Exception:
-        pass
-
 def init_audio(progress):
     global AUDIO_OK
     try:
@@ -231,7 +189,8 @@ def init_audio(progress):
         AUDIO_OK = False
         return False
 
-    # Load each asset independently so one bad asset cannot disable all audio.
+    # Pygbag packages the audio directory into its virtual game filesystem.
+    # Use pygame.mixer directly; browser DOM <audio> cannot see that virtual FS.
     for name in ("move", "world_move", "select", "correct", "wrong", "hint", "boss", "victory"):
         if name in SOUNDS:
             continue
@@ -243,16 +202,6 @@ def init_audio(progress):
                 pass
 
     apply_audio_settings(progress)
-
-    theme = AUDIO_DIR / "bloody_math_theme.ogg"
-    if theme.exists():
-        try:
-            pygame.mixer.music.load(str(theme))
-            pygame.mixer.music.play(-1)
-        except Exception:
-            # Browser autoplay policies can block playback until the first
-            # real user interaction. unlock_audio() retries after that input.
-            pass
     return True
 
 def unlock_audio(progress=None):
@@ -261,29 +210,21 @@ def unlock_audio(progress=None):
     if progress is None:
         return
 
-    # Browser-native audio is more reliable than SDL_mixer under WebAssembly.
-    if sys.platform == "emscripten":
-        init_web_audio(progress)
-        play_web_music()
-        AUDIO_UNLOCKED = WEB_AUDIO_READY
-        return
+    if not AUDIO_UNLOCKED:
+        init_audio(progress)
 
-    if AUDIO_UNLOCKED:
-        return
-    if not init_audio(progress):
-        return
     try:
-        if not pygame.mixer.music.get_busy():
-            theme = AUDIO_DIR / "bloody_math_theme.ogg"
-            if theme.exists():
-                pygame.mixer.music.load(str(theme))
-                pygame.mixer.music.play(-1)
+        theme = AUDIO_DIR / "bloody_math_theme.ogg"
+        if theme.exists() and not pygame.mixer.music.get_busy():
+            pygame.mixer.music.load(str(theme))
+            pygame.mixer.music.set_volume(float(ensure_settings(progress)["music_volume"]))
+            pygame.mixer.music.play(-1)
         AUDIO_UNLOCKED = True
     except Exception:
         pass
 
 def get_events():
-    # Pygbag/browser audio must be unlocked from a real user gesture.
+    # Pygbag/browser audio is unlocked by the first real user interaction.
     events = pygame.event.get()
     for e in events:
         if e.type in (
@@ -298,15 +239,6 @@ def get_events():
 
 def play_sfx(name):
     try:
-        if sys.platform == "emscripten":
-            if not WEB_AUDIO_READY and ACTIVE_PROGRESS is not None:
-                init_web_audio(ACTIVE_PROGRESS)
-            sound = WEB_AUDIO.get(name)
-            if sound is not None:
-                sound.volume = float(ensure_settings(ACTIVE_PROGRESS)["sfx_volume"])
-                sound.currentTime = 0
-                sound.play()
-                return
         if AUDIO_OK and name in SOUNDS:
             SOUNDS[name].play()
     except Exception:
@@ -1949,8 +1881,6 @@ async def run():
     ensure_settings(progress)
     apply_display_mode(progress)
     init_audio(progress)
-    if sys.platform == "emscripten":
-        init_web_audio(progress)
     while True:
         result=await main_menu(progress)
         if result=="quit":break
