@@ -232,7 +232,7 @@ def unlock_audio(progress=None):
 
 def get_events():
     # Pygbag/browser audio must be unlocked from a real user gesture.
-    events = get_events()
+    events = pygame.event.get()
     for e in events:
         if e.type in (
             pygame.MOUSEBUTTONDOWN,
