@@ -1,22 +1,22 @@
-# Bloody Math: Algebra Quest
+# Bloody Math: Algebra Quest — Web Edition
 
-An educational algebra game for college students featuring interactive practice, step-by-step explanations, randomized problems, and progressive difficulty.
+Browser port of Bloody Math v1.6.0, intended for Chrome/Chromium and ChromeOS via Pygbag + GitHub Pages.
 
-## Web Version
+## Local build
 
-This repository contains the browser/WebAssembly port of Bloody Math v1.6.0, built with Pygame and Pygbag.
+```bash
+python3 -m pip install --upgrade pygbag
+python3 -m pygbag --build --title "Bloody Math: Algebra Quest" game
+```
 
-## Features
+The generated site is under `game/build/web/`.
 
-- Interactive algebra practice
-- Randomized problems
-- Step-by-step explanations after each answer
-- Progressive difficulty
-- College Beast difficulty
-- Keyboard and mouse controls
-- Music and sound effects
-- Browser-ready build through GitHub Pages
+## GitHub Pages
 
-## Local web build
+The included GitHub Actions workflow builds the Pygbag version and deploys `game/build/web/` to GitHub Pages whenever `main` changes.
 
-The GitHub Actions workflow builds the game with Pygbag and publishes the generated web build to GitHub Pages.
+## Notes
+
+- Gameplay content is based on Bloody Math v1.6.0.
+- Browser audio uses OGG assets.
+- The desktop Linux `.deb` remains the reference build; this web port is a separate target.
