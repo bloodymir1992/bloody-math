@@ -9,6 +9,7 @@ import re
 import sys
 from pathlib import Path
 
+pygame.mixer.pre_init(44100, -16, 2, 512)
 pygame.init()
 pygame.joystick.init()
 
@@ -189,8 +190,6 @@ def init_audio(progress):
         AUDIO_OK = False
         return False
 
-    # Pygbag packages the audio directory into its virtual game filesystem.
-    # Use pygame.mixer directly; browser DOM <audio> cannot see that virtual FS.
     for name in ("move", "world_move", "select", "correct", "wrong", "hint", "boss", "victory"):
         if name in SOUNDS:
             continue
@@ -202,6 +201,18 @@ def init_audio(progress):
                 pass
 
     apply_audio_settings(progress)
+
+    # With --ume_block=1, pygbag waits for the browser's media-engagement
+    # gesture before starting the Python app, so music can safely start here.
+    theme = AUDIO_DIR / "bloody_math_theme.ogg"
+    if theme.exists():
+        try:
+            pygame.mixer.music.load(str(theme))
+            pygame.mixer.music.set_volume(float(ensure_settings(progress)["music_volume"]))
+            pygame.mixer.music.play(-1)
+        except Exception:
+            pass
+
     return True
 
 def unlock_audio(progress=None):
@@ -209,33 +220,12 @@ def unlock_audio(progress=None):
     progress = progress or ACTIVE_PROGRESS
     if progress is None:
         return
-
     if not AUDIO_UNLOCKED:
         init_audio(progress)
-
-    try:
-        theme = AUDIO_DIR / "bloody_math_theme.ogg"
-        if theme.exists() and not pygame.mixer.music.get_busy():
-            pygame.mixer.music.load(str(theme))
-            pygame.mixer.music.set_volume(float(ensure_settings(progress)["music_volume"]))
-            pygame.mixer.music.play(-1)
-        AUDIO_UNLOCKED = True
-    except Exception:
-        pass
+    AUDIO_UNLOCKED = AUDIO_OK
 
 def get_events():
-    # Pygbag/browser audio is unlocked by the first real user interaction.
-    events = pygame.event.get()
-    for e in events:
-        if e.type in (
-            pygame.MOUSEBUTTONDOWN,
-            pygame.KEYDOWN,
-            pygame.JOYBUTTONDOWN,
-            pygame.FINGERDOWN,
-        ):
-            unlock_audio()
-            break
-    return events
+    return pygame.event.get()
 
 def play_sfx(name):
     try:
