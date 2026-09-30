@@ -29,6 +29,16 @@ jobs:
       - name: Install Pygbag
         run: python -m pip install --upgrade pygbag
 
+      - name: Optimize web audio assets
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+          for f in game/audio/*.ogg; do
+            tmp="${f}.web.ogg"
+            ffmpeg -hide_banner -loglevel error -y -i "$f" -ar 24000 -ac 1 -c:a libvorbis -q:a 4 "$tmp"
+            mv "$tmp" "$f"
+          done
+
       - name: Build WebAssembly game
         run: 'python -m pygbag --build --width 1280 --height 800 --ume_block 1 --title "Bloody Math: Algebra Quest" game'
 
