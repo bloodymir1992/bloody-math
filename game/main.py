@@ -160,7 +160,6 @@ WEB_SOUNDS = {}
 WEB_AUDIO_READY = False
 AUDIO_UNLOCKED = False
 WEB_AUDIO_EVENT_CALLBACK = None
-WEB_KEYPAD_CALLBACK = None
 WEB_KEYPAD_QUEUE = []
 
 def ensure_settings(progress):
@@ -215,11 +214,26 @@ def _web_audio_element(filename, volume, loop=False):
         return None
 
 def _web_user_gesture(event=None):
-    """Run directly from a DOM gesture so Edge grants media playback."""
+    """Handle browser gestures for audio and physical Numpad input."""
     global AUDIO_UNLOCKED
     if sys.platform != "emscripten":
         return
     try:
+        # Capture Numpad digits in this SAME keydown callback. Registering a
+        # second EventTarget keydown handler can interfere with the audio
+        # gesture handler in Pygbag's browser bridge.
+        if event is not None:
+            code = str(event.code)
+            mapping = {
+                "Numpad0": "0", "Numpad1": "1", "Numpad2": "2",
+                "Numpad3": "3", "Numpad4": "4", "Numpad5": "5",
+                "Numpad6": "6", "Numpad7": "7", "Numpad8": "8",
+                "Numpad9": "9", "NumpadDecimal": ".",
+            }
+            if code in mapping:
+                WEB_KEYPAD_QUEUE.append(mapping[code])
+                event.preventDefault()
+
         settings = ensure_settings(ACTIVE_PROGRESS)
         music = WEB_SOUNDS.get("music")
         if music is not None:
@@ -227,24 +241,6 @@ def _web_user_gesture(event=None):
             music.currentTime = 0
             music.play()
             AUDIO_UNLOCKED = True
-    except Exception:
-        pass
-
-def _web_keypad_gesture(event):
-    """Capture physical Numpad digits before SDL/Pygame translates them."""
-    if sys.platform != "emscripten":
-        return
-    try:
-        code = str(event.code)
-        mapping = {
-            "Numpad0": "0", "Numpad1": "1", "Numpad2": "2",
-            "Numpad3": "3", "Numpad4": "4", "Numpad5": "5",
-            "Numpad6": "6", "Numpad7": "7", "Numpad8": "8",
-            "Numpad9": "9", "NumpadDecimal": ".",
-        }
-        if code in mapping:
-            WEB_KEYPAD_QUEUE.append(mapping[code])
-            event.preventDefault()
     except Exception:
         pass
 
@@ -283,10 +279,6 @@ def init_web_audio(progress):
             WEB_AUDIO_EVENT_CALLBACK = _web_user_gesture
             platform.EventTarget.addEventListener(None, "pointerdown", WEB_AUDIO_EVENT_CALLBACK)
             platform.EventTarget.addEventListener(None, "keydown", WEB_AUDIO_EVENT_CALLBACK)
-
-        if WEB_KEYPAD_CALLBACK is None:
-            WEB_KEYPAD_CALLBACK = _web_keypad_gesture
-            platform.EventTarget.addEventListener(None, "keydown", WEB_KEYPAD_CALLBACK)
 
         return WEB_AUDIO_READY
     except Exception:
