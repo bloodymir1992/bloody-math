@@ -21,7 +21,7 @@ AUDIO_OK = False
 
 WIDTH, HEIGHT = 1280, 800
 FPS = 60
-TITLE = "Bloody Math: Algebra Quest v1.6.0"
+TITLE = "Bloody Math: Algebra Quest v1.7.1"
 
 BG = (10, 10, 16)
 PANEL = (22, 22, 32)
@@ -152,7 +152,7 @@ SAVE_DIR = Path.home() / ".local" / "share" / "bloody-math"
 SAVE_FILE = SAVE_DIR / "progress.json"
 
 AUDIO_DIR = Path(__file__).parent / "audio"
-DIFFICULTIES = ["Easy", "Medium", "Hard", "Expert", "College Beast"]
+DIFFICULTIES = ["Easy", "Medium", "Hard", "Expert", "College Beast", "Bloody Beast"]
 SYMBOLS = ["^", "(", ")", "+", "-", "*", "/", "=", "<", ">", "!=", ",", ".", "sqrt(", "pi"]
 
 SOUNDS = {}
@@ -391,7 +391,6 @@ def play_sfx(name):
         pass
 
 def math_key_text(event):
-    # Reliable math symbols for common US keyboard layouts.
     shift = bool(event.mod & pygame.KMOD_SHIFT)
     shifted = {
         pygame.K_1:"!", pygame.K_2:"@", pygame.K_3:"#", pygame.K_4:"$",
@@ -436,13 +435,10 @@ async def difficulty_select(progress, automatic=False):
     settings = ensure_settings(progress)
     idx = DIFFICULTIES.index(settings.get("difficulty", "Medium")) if settings.get("difficulty") in DIFFICULTIES else 1
     while True:
-        # Five difficulty cards: 3 on the first row, 2 centered on the second.
         rects=[]
         for i in range(len(DIFFICULTIES)):
-            if i < 3:
-                rects.append(pygame.Rect(90+i*400,285,360,78))
-            else:
-                rects.append(pygame.Rect(290+(i-3)*400,425,360,78))
+            row,col=divmod(i,3)
+            rects.append(pygame.Rect(90+col*400,285+row*140,360,78))
         back_rect=pygame.Rect(WIDTH//2-100,650,200,46)
         for e in get_events():
             if e.type == pygame.QUIT:
@@ -481,11 +477,12 @@ async def difficulty_select(progress, automatic=False):
             "Hard":"Larger values and tougher calculations.",
             "Expert":"Maximum numerical difficulty for exam prep.",
             "College Beast":"Long multi-step college-style equations. Bring your scratch paper.",
+            "Bloody Beast":"Integrated multi-step problems covering the hardest algebra topics.",
         }
         for i,name in enumerate(DIFFICULTIES):
             button(rects[i],name.upper(),i==idx)
             draw_wrapped(desc[name],TINY,MUTED,rects[i].x,rects[i].bottom+12,rects[i].w)
-        draw_text("College Beast adds multi-step problems; Challenge Mode climbs to it at the end.", SMALL, CYAN, WIDTH//2, 585, center=True)
+        draw_text("Bloody Beast combines multiple algebra skills into longer problems.", SMALL, CYAN, WIDTH//2, 585, center=True)
         button(back_rect,"BACK",False)
         draw_text("Mouse / Arrow keys / WASD supported", TINY, MUTED, WIDTH//2, 720, center=True)
         present(); clock.tick(FPS); await asyncio.sleep(0)
@@ -515,9 +512,9 @@ def challenge_difficulty(qnum, total):
     if ratio < .20: return "Easy"
     if ratio < .40: return "Medium"
     if ratio < .65: return "Hard"
-    if ratio < .85: return "Expert"
-    return "College Beast"
-
+    if ratio < .80: return "Expert"
+    if ratio < .92: return "College Beast"
+    return "Bloody Beast"
 
 WORLD_DATA = [
     ("World 1", "Algebra Foundations", [
@@ -578,6 +575,16 @@ WORLD_DATA = [
         "Arithmetic Sequences",
         "Geometric Sequences",
         "Series and Their Notations",
+    ]),
+    ("World 9", "Graphing Lab", [
+        "Plotting Points",
+        "Slope and Rate of Change",
+        "Graphing Linear Equations",
+        "Graphing Linear Inequalities",
+        "Graphing Functions",
+        "Graph Transformations",
+        "Graphing Inverse Functions",
+        "Graphing Rational Functions",
     ]),
 ]
 
@@ -686,13 +693,14 @@ def unordered_pair_eq(user, pair):
     return all(any(abs(v - p) < 1e-6 for v in vals) for p in pair)
 
 class Problem:
-    def __init__(self, prompt, answer, steps, hint="", checker=None, display_answer=None):
+    def __init__(self, prompt, answer, steps, hint="", checker=None, display_answer=None, graph=None):
         self.prompt = prompt
         self.answer = str(answer)
         self.steps = steps
         self.hint = hint or (steps[0] if steps else "Work one step at a time.")
         self.checker = checker
         self.display_answer = display_answer or self.answer
+        self.graph = graph
 
     def check(self, user):
         if self.checker:
@@ -916,6 +924,46 @@ def lesson_for(topic):
             "Geometric sum: S_n=a_1(1-r^n)/(1-r), r≠1.",
             "Sigma notation compactly represents repeated addition."
         ]),
+        "Plotting Points": ("Points on the coordinate plane are written as ordered pairs (x, y).", [
+            "The first coordinate moves horizontally along the x-axis.",
+            "The second coordinate moves vertically along the y-axis.",
+            "Read the grid carefully before entering the ordered pair."
+        ]),
+        "Slope and Rate of Change": ("Slope measures vertical change over horizontal change.", [
+            "Use m=(y2-y1)/(x2-x1).",
+            "Positive slope rises from left to right; negative slope falls.",
+            "A horizontal line has slope 0."
+        ]),
+        "Graphing Linear Equations": ("A linear equation produces a straight-line graph.", [
+            "The y-intercept occurs where x=0.",
+            "Use the slope to determine the line's direction.",
+            "Read intercepts directly from the coordinate plane."
+        ]),
+        "Graphing Linear Inequalities": ("Linear inequalities use a boundary line and a shaded region.", [
+            "Graph the boundary line first.",
+            "Use a test point to determine the shaded side.",
+            "The inequality symbol determines the solution region."
+        ]),
+        "Graphing Functions": ("A function graph relates each input x to an output y.", [
+            "Locate the requested x-value on the graph.",
+            "Move vertically to the function and read the y-value.",
+            "The resulting y-value is f(x)."
+        ]),
+        "Graph Transformations": ("Transformations move, reflect, or stretch a parent graph.", [
+            "Horizontal and vertical shifts change position.",
+            "Reflections change orientation.",
+            "Compare the transformed graph with its parent function."
+        ]),
+        "Graphing Inverse Functions": ("Inverse functions swap inputs and outputs.", [
+            "Swap x and y coordinates to find inverse points.",
+            "The graph of an inverse reflects across y=x.",
+            "Check that the point belongs to the inverse graph."
+        ]),
+        "Graphing Rational Functions": ("Rational graphs can contain asymptotes and separate branches.", [
+            "Set the denominator equal to zero to find a vertical asymptote.",
+            "The graph cannot cross a vertical asymptote.",
+            "Read the coordinate plane to identify the function's behavior."
+        ]),
     }
     return lessons.get(topic, ("Study the core definition and connect each algebraic step to a property.", [
         "Read the expression carefully.",
@@ -923,9 +971,107 @@ def lesson_for(topic):
         "Check your result in the original problem."
     ]))
 
+def beast_multi_step_problem(topic):
+    r=random
+    if topic in ("Linear Equations in One Variable","Other Types of Equations"):
+        x=r.randint(-9,9) or 6; d=r.choice([2,3,4,5,6]); a=r.choice([3,4,5,7]); b=r.randint(-15,15); c=r.randint(-8,8); e=r.choice([1,2,3,4])
+        while (a*x+b)%d: b+=1
+        f=(a*x+b)//d+c-e*x
+        lhs=f"({a}x {b:+})/{d} {c:+}"; rhs=f"{e}x {f:+}"
+        return Problem(f"Solve the multi-step equation: {lhs} = {rhs}. Enter x.",x,[f"Multiply every term by {d}.","Combine like terms on each side.","Move variable terms to one side and constants to the other.",f"Divide by the remaining coefficient.",f"Verify the solution: x={x}."],display_answer=str(x))
+    if topic=="Rational Expressions":
+        a=r.choice([2,3,4,5]); b=r.randint(1,7); target=r.choice([n for n in range(-8,10) if n!=a]); c=target+a+b
+        return Problem(f"Solve and state restrictions: (x^2-{a*a})/(x-{a}) + {b} = {c}.",target,[f"Restriction: x ≠ {a}.",f"Factor x^2-{a*a}=(x-{a})(x+{a}).","Cancel only the common factor, keeping the restriction.",f"Solve x+{a}+{b}={c}.",f"Solution x={target} satisfies the restriction."],display_answer=str(target))
+    if topic=="Quadratic Equations":
+        p=r.randint(-8,8); q=r.randint(-8,8)
+        while q==p: q=r.randint(-8,8)
+        b=-(p+q); c=p*q; disp=f"{min(p,q)}, {max(p,q)}"
+        return Problem(f"Solve the quadratic equation x^2 {b:+}x {c:+}=0. Enter both roots.",disp,["Set the equation equal to zero.",f"Factor: (x-{p})(x-{q})=0.",f"Set each factor equal to zero: x={p} or x={q}.",f"Verify both roots in the original equation."],checker=lambda u: unordered_pair_eq(u,[p,q]),display_answer=disp)
+    if topic=="Linear Inequalities and Absolute Value Inequalities":
+        a=r.choice([2,3,4]); boundary=r.randint(-6,6); b=r.randint(-8,8); rhs=a*boundary+b
+        ans=f"x>{boundary}"; return Problem(f"Solve: {a}x {b:+} > {rhs}.",ans,["Subtract the constant term.",f"Divide by the positive coefficient {a}; the inequality direction stays the same.",f"Solution: {ans}."],checker=lambda u: normalize(u)==normalize(ans),display_answer=ans)
+    if topic in ("Functions and Function Notation","Composition of Functions"):
+        a,b,c,d,e,f=[r.choice([-4,-3,-2,2,3,4]) for _ in range(6)]; x=r.randint(-4,4); u=a*x+b; v=c*u+d; ans=e*v+f
+        return Problem(f"Given f(x)={a}x{b:+}, g(x)={c}x{d:+}, h(x)={e}x{f:+}, find h(g(f({x}))).",ans,[f"f({x})={u}.",f"g({u})={v}.",f"h({v})={ans}.","Check the substitutions in reverse order."],display_answer=str(ans))
+    if topic=="Exponential and Logarithmic Equations":
+        base=r.choice([2,3,5]); x=r.randint(2,5); n=base**x
+        return Problem(f"Solve: {base}^(2x-1) = {base**(2*x-1)}.",x,["Use the one-to-one property of exponential functions.",f"Set 2x-1 = {2*x-1}.",f"Add 1 and divide by 2: x={x}."],display_answer=str(x))
+    if topic=="Factoring Polynomials":
+        p=r.randint(-7,7); q=r.randint(-7,7); b=-(p+q); c=p*q; disp=f"(x-{p})(x-{q})"
+        return Problem(f"Factor completely: x^2 {b:+}x {c:+}.",disp,["Find two numbers whose product is the constant term and whose sum is the x-coefficient.",f"Those numbers are {-p} and {-q} in factor form.",f"Factored form: {disp}."],checker=lambda u: normalize(u)==normalize(disp),display_answer=disp)
+    if topic=="Systems of Linear Equations: Three Variables":
+        x,y,z=[r.randint(-4,4) for _ in range(3)]; A=r.choice([1,2,3]); B=r.choice([1,2,3]); C=r.choice([1,2,3])
+        e=A*x+B*y+C*z; disp=f"({x},{y},{z})"
+        return Problem(f"Solve: {A}x+{B}y+{C}z={e}; x-y={x-y}; z={z}. Enter (x,y,z).",disp,["Use z first, then substitute into the first equation.","Use x-y to form a two-variable system.",f"Solve to get x={x}, y={y}.",f"Therefore (x,y,z)=({x},{y},{z})."],checker=lambda u: normalize(u)==normalize(disp),display_answer=disp)
+    return None
+
+def draw_coordinate_graph(rect, graph):
+    """Draw a clean coordinate plane for graphing practice questions."""
+    x0,y0,w,h=rect
+    pygame.draw.rect(screen,(18,18,27),rect,border_radius=10)
+    xmin,xmax=graph.get("xmin",-6),graph.get("xmax",6)
+    ymin,ymax=graph.get("ymin",-6),graph.get("ymax",6)
+    def px(x): return int(x0+(x-xmin)/(xmax-xmin)*w)
+    def py(y): return int(y0+h-(y-ymin)/(ymax-ymin)*h)
+    for x in range(xmin,xmax+1):
+        xx=px(x); pygame.draw.line(screen,(48,48,62),(xx,y0),(xx,y0+h),1)
+    for y in range(ymin,ymax+1):
+        yy=py(y); pygame.draw.line(screen,(48,48,62),(x0,yy),(x0+w,yy),1)
+    if xmin<=0<=xmax: pygame.draw.line(screen,WHITE,(px(0),y0),(px(0),y0+h),2)
+    if ymin<=0<=ymax: pygame.draw.line(screen,WHITE,(x0,py(0)),(x0+w,py(0)),2)
+    for x in range(xmin,xmax+1):
+        if x: draw_text(str(x),TINY,MUTED,px(x),py(0)+8,center=True)
+    for y in range(ymin,ymax+1):
+        if y: draw_text(str(y),TINY,MUTED,px(0)+14,py(y)-8,center=True)
+    kind=graph.get("kind")
+    if kind=="line":
+        m,b=graph["m"],graph["b"]
+        pts=[]
+        for i in range(w+1):
+            x=xmin+(xmax-xmin)*i/max(1,w); y=m*x+b
+            if ymin-1<=y<=ymax+1: pts.append((px(x),py(y)))
+        if len(pts)>1: pygame.draw.lines(screen,BLUE,False,pts,4)
+    elif kind=="parabola":
+        h0,k=graph.get("h",0),graph.get("k",0); a=graph.get("a",1)
+        pts=[]
+        for i in range(w+1):
+            x=xmin+(xmax-xmin)*i/max(1,w); y=a*(x-h0)**2+k
+            if ymin-1<=y<=ymax+1: pts.append((px(x),py(y)))
+        if len(pts)>1: pygame.draw.lines(screen,PURPLE,False,pts,4)
+    elif kind=="rational":
+        a=graph.get("a",1); h0=graph.get("h",0); k=graph.get("k",0)
+        for side in (-1,1):
+            pts=[]
+            lo=xmin if side<0 else h0+0.08; hi=h0-0.08 if side<0 else xmax
+            if lo>=hi: continue
+            for i in range(w+1):
+                x=lo+(hi-lo)*i/max(1,w); y=a/(x-h0)+k
+                if ymin-1<=y<=ymax+1: pts.append((px(x),py(y)))
+                else:
+                    if len(pts)>1: pygame.draw.lines(screen,ORANGE,False,pts,3)
+                    pts=[]
+            if len(pts)>1: pygame.draw.lines(screen,ORANGE,False,pts,3)
+        pygame.draw.line(screen,(160,90,70),(px(h0),y0),(px(h0),y0+h),1)
+    elif kind=="points":
+        for x,y in graph.get("points",[]):
+            pygame.draw.circle(screen,CYAN,(px(x),py(y)),6)
+    elif kind=="inverse":
+        pygame.draw.line(screen,MUTED,(px(xmin),py(xmin)),(px(xmax),py(xmax)),2)
+        m,b=graph["m"],graph["b"]
+        pts=[]
+        for i in range(w+1):
+            x=xmin+(xmax-xmin)*i/max(1,w); y=m*x+b
+            if ymin-1<=y<=ymax+1: pts.append((px(x),py(y)))
+        if len(pts)>1: pygame.draw.lines(screen,BLUE,False,pts,4)
+
 def make_problem(topic, difficulty="Medium"):
     r = random
     rr = lambda lo, hi: scaled_randint(lo, hi, difficulty)
+
+    if difficulty == "Bloody Beast":
+        hard = beast_multi_step_problem(topic)
+        if hard is not None:
+            return hard
 
     # COLLEGE BEAST: deliberately longer, multi-step problems modeled after
     # the kind of algebra work that requires several transformations.
@@ -1404,6 +1550,34 @@ def make_problem(topic, difficulty="Medium"):
         return Problem(f"Find the sum of the first {n} terms: a1={a1}, d={d}.", ans,
                        [f"First find a_n={an}.", f"Use S_n=n(a_1+a_n)/2.", f"S_{n}={n}({a1}+{an})/2={ans}."])
 
+    if topic == "Plotting Points":
+        x,y=rr(-5,5),rr(-5,5); disp=f"({x},{y})"
+        return Problem("The graph shows a point. Enter its coordinates as (x,y).",disp,[f"Read horizontally for x={x}.",f"Read vertically for y={y}.",f"The point is ({x},{y})."],checker=lambda u: normalize(u)==normalize(disp),display_answer=disp,graph={"kind":"points","points":[(x,y)]})
+    if topic == "Slope and Rate of Change":
+        x1,y1=rr(-5,3),rr(-5,5); dx=r.choice([-3,-2,-1,1,2,3]); dy=r.choice([-6,-4,-3,-2,-1,1,2,3,4,6]); x2=x1+dx; y2=y1+dy
+        if not (-6<=x2<=6 and -6<=y2<=6): x2=x1+1; y2=y1+dy
+        m=dy/(x2-x1); disp=str(int(m)) if float(m).is_integer() else str(round(m,3))
+        return Problem(f"Find the slope through ({x1},{y1}) and ({x2},{y2}).",disp,[f"Use m=(y2-y1)/(x2-x1).",f"m=({y2}-{y1})/({x2}-{x1}).",f"m={disp}."],checker=lambda u:num_eq(u,m),display_answer=disp,graph={"kind":"points","points":[(x1,y1),(x2,y2)]})
+    if topic == "Graphing Linear Equations":
+        m=r.choice([-2,-1,1,2,3]); b=rr(-4,4)
+        return Problem(f"For y={m}x{b:+}, enter the y-intercept as (0,b).",f"(0,{b})",[f"Set x=0 in y={m}x{b:+}.",f"y={b}.",f"The y-intercept is (0,{b})."],checker=lambda u: normalize(u)==normalize(f"(0,{b})"),display_answer=f"(0, {b})",graph={"kind":"line","m":m,"b":b})
+    if topic == "Graphing Linear Inequalities":
+        m=r.choice([-2,-1,1,2]); b=rr(-3,3); sign=r.choice(["<",">"])
+        return Problem(f"Use the graph to identify the inequality boundary. Enter '{sign}'.",sign,["Graph the boundary line first.",f"Because the inequality is {sign}, use the shaded side.",f"The boundary relation is {sign}."],checker=lambda u: normalize(u)==normalize(sign),display_answer=sign,graph={"kind":"line","m":m,"b":b})
+    if topic == "Graphing Functions":
+        m=r.choice([-2,-1,1,2]); b=rr(-3,3); x=rr(-3,3); y=m*x+b
+        return Problem(f"Use the graph to find f({x}).",y,[f"Locate x={x}.",f"The graph gives y={m}({x}){b:+}={y}.",f"Therefore f({x})={y}."],display_answer=str(y),graph={"kind":"line","m":m,"b":b})
+    if topic == "Graph Transformations":
+        h,k=rr(-4,4),rr(-4,4); disp=f"({h},{k})"
+        return Problem("Use the graph to identify the vertex (h,k).",disp,["Compare the graph with y=(x-h)^2+k.",f"h={h} and k={k}.",f"Vertex=({h},{k})."],checker=lambda u: normalize(u)==normalize(disp),display_answer=disp,graph={"kind":"parabola","h":h,"k":k,"a":1})
+    if topic == "Graphing Inverse Functions":
+        m=r.choice([1,2,3]); b=rr(-3,3); x=rr(-3,3); y=m*x+b
+        disp=str(y)
+        return Problem(f"A point on f is ({x},{y}). What is the corresponding x-value on f^-1?",disp,["Inverse functions swap x and y coordinates.",f"The inverse point is ({y},{x}).",f"Therefore the requested x-value is {y}."],display_answer=str(y),graph={"kind":"inverse","m":m,"b":b})
+    if topic == "Graphing Rational Functions":
+        h=rr(-3,3); k=rr(-2,2)
+        return Problem("Use the graph to find the vertical asymptote.",f"x={h}",[f"Set the denominator equal to zero.",f"The vertical asymptote is x={h}."],checker=lambda u: normalize(u)==normalize(f"x={h}"),display_answer=f"x = {h}",graph={"kind":"rational","h":h,"k":k,"a":1})
+
     return Problem("What is 2 + 2?", 4, ["Add the two numbers.", "2+2=4."])
 
 def starfield():
@@ -1695,10 +1869,11 @@ async def problem_screen(topic,p,mode,qnum,total,lives,score,combo,boss_title=No
     correct=False
     while True:
         symbol_rects=[]
-        sx, sy = 80, 520
-        for i,sym in enumerate(SYMBOLS):
-            row=i//8; col=i%8
-            symbol_rects.append((pygame.Rect(sx+col*105, sy+row*50, 94, 40), sym))
+        sx, sy = 80, (630 if getattr(p, "graph", None) else 520)
+        if not getattr(p, "graph", None):
+            for i,sym in enumerate(SYMBOLS):
+                row=i//8; col=i%8
+                symbol_rects.append((pygame.Rect(sx+col*105, sy+row*50, 94, 40), sym))
 
         for e in get_events():
             if e.type==pygame.QUIT:return {"correct":False,"used_hint":used_hint}
@@ -1733,6 +1908,7 @@ async def problem_screen(topic,p,mode,qnum,total,lives,score,combo,boss_title=No
                     ch=math_key_text(e)
                     if ch:
                         typed += ch
+
         draw_background();header((boss_title or mode.upper()))
         draw_text(f"QUESTION {qnum}/{total}",SMALL,CYAN,45,112)
         draw_text(f"DIFFICULTY {difficulty.upper()}",SMALL,ORANGE,250,112)
@@ -1740,41 +1916,54 @@ async def problem_screen(topic,p,mode,qnum,total,lives,score,combo,boss_title=No
         if mode=="challenge" or boss_title:
             draw_text(f"LIVES {lives}",SMALL,RED,945,112)
         draw_text(f"COMBO x{combo}",SMALL,GREEN,800,112)
-        pygame.draw.rect(screen,PANEL,(45,155,1190,250),border_radius=12)
-        draw_text(topic,TINY,MUTED,70,175)
-        draw_wrapped(p.prompt,FONT,WHITE,70,220,1120,40)
 
-        pygame.draw.rect(screen,PANEL2,(80,430,1120,60),border_radius=8)
-        draw_text("ANSWER:",SMALL,CYAN,100,449)
-        draw_text(typed+"|" if not submitted else typed,FONT,WHITE,230,444)
+        graph = getattr(p, "graph", None)
+        panel_h = 355 if graph else 250
+        pygame.draw.rect(screen,PANEL,(45,155,1190,panel_h),border_radius=12)
+        draw_text(topic,TINY,MUTED,70,175)
+        if graph:
+            draw_wrapped(p.prompt,FONT,WHITE,70,210,520,34)
+            draw_coordinate_graph((650,195,535,300), graph)
+            answer_y = 530
+        else:
+            draw_wrapped(p.prompt,FONT,WHITE,70,220,1120,40)
+            answer_y = 430
+
+        pygame.draw.rect(screen,PANEL2,(80,answer_y,1120,60),border_radius=8)
+        draw_text("ANSWER:",SMALL,CYAN,100,answer_y+19)
+        draw_text(typed+"|" if not submitted else typed,FONT,WHITE,230,answer_y+14)
 
         if not submitted:
-            draw_text("MATH SYMBOLS — CLICK TO INSERT", SMALL, YELLOW, 80, 492)
-            pygame.draw.rect(screen,PANEL,(64,510,865,115),border_radius=10)
-            for rect,sym in symbol_rects:
-                hover=rect.collidepoint(logical_mouse_pos())
-                pygame.draw.rect(screen,RED if hover else PANEL2,rect,border_radius=6)
-                pygame.draw.rect(screen,WHITE if hover else (100,100,118),rect,2,border_radius=6)
-                draw_text(sym,SMALL,WHITE,rect.centerx,rect.centery,center=True)
-            draw_text("Keyboard shortcuts also work",TINY,CYAN,960,530)
-            draw_text("Shift+6 = ^",TINY,WHITE,960,560)
-            draw_text("Use buttons if your layout",TINY,MUTED,960,590)
-            draw_text("does not type a symbol.",TINY,MUTED,960,615)
+            sym_top = 602 if graph else 492
+            if not graph:
+                draw_text("MATH SYMBOLS — CLICK TO INSERT", SMALL, YELLOW, 80, sym_top)
+                pygame.draw.rect(screen,PANEL,(64,sym_top+18,865,115),border_radius=10)
+                for rect,sym in symbol_rects:
+                    hover=rect.collidepoint(logical_mouse_pos())
+                    pygame.draw.rect(screen,RED if hover else PANEL2,rect,border_radius=6)
+                    pygame.draw.rect(screen,WHITE if hover else (100,100,118),rect,2,border_radius=6)
+                    draw_text(sym,SMALL,WHITE,rect.centerx,rect.centery,center=True)
+                draw_text("Keyboard shortcuts also work",TINY,CYAN,960,530)
+                draw_text("Shift+6 = ^",TINY,WHITE,960,560)
+                draw_text("Use buttons if your layout",TINY,MUTED,960,590)
+                draw_text("does not type a symbol.",TINY,MUTED,960,615)
+            else:
+                draw_text("Type your answer with the keyboard",TINY,CYAN,940,555)
 
         if feedback:
             color=GREEN if correct else (YELLOW if feedback.startswith("HINT") else RED)
-            draw_wrapped(feedback,SMALL,color,80,535,1120)
+            draw_wrapped(feedback,SMALL,color,80,(555 if graph else 535),1120)
 
         if submitted:
-            draw_text("Answer:",SMALL,MUTED,80,585)
-            draw_text(p.display_answer,FONT,GREEN,175,578)
+            draw_text("Answer:",SMALL,MUTED,80,(610 if graph else 585))
+            draw_text(p.display_answer,FONT,GREEN,175,(603 if graph else 578))
             if show_steps:
-                y=630
+                y=(645 if graph else 630)
                 for i,st in enumerate(p.steps,1):
                     draw_text(f"{i}.",TINY,CYAN,85,y)
                     y=draw_wrapped(st,TINY,WHITE,115,y,1065,26)
             else:
-                draw_text("Press S to show solution steps.",TINY,MUTED,80,635)
+                draw_text("Press S to show solution steps.",TINY,MUTED,80,(665 if graph else 635))
             draw_text("Press ENTER for next question",TINY,MUTED,WIDTH//2,750,center=True)
         else:
             hinttxt="H = Hint   " if mode in ("guided","practice") else ""
