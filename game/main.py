@@ -214,21 +214,30 @@ def _web_audio_element(filename, volume, loop=False):
     except Exception:
         return None
 
+def _start_web_music(progress=None):
+    """Start/resume browser music without restarting it on every key press."""
+    if sys.platform != "emscripten":
+        return False
+    try:
+        progress = progress or ACTIVE_PROGRESS
+        settings = ensure_settings(progress)
+        music = WEB_SOUNDS.get("music")
+        if music is not None:
+            music.volume = float(settings["music_volume"])
+            if bool(music.paused):
+                music.play()
+            return True
+    except Exception:
+        pass
+    return False
+
 def _web_user_gesture(event=None):
     """Run directly from a DOM gesture so Edge grants media playback."""
     global AUDIO_UNLOCKED
     if sys.platform != "emscripten":
         return
-    try:
-        settings = ensure_settings(ACTIVE_PROGRESS)
-        music = WEB_SOUNDS.get("music")
-        if music is not None:
-            music.volume = float(settings["music_volume"])
-            music.currentTime = 0
-            music.play()
-            AUDIO_UNLOCKED = True
-    except Exception:
-        pass
+    if _start_web_music():
+        AUDIO_UNLOCKED = True
 
 def _web_keypad_gesture(event):
     """Capture physical Numpad digits from the browser before SDL translates them."""
@@ -389,6 +398,9 @@ def play_sfx(name):
         if sys.platform == "emscripten":
             if not WEB_AUDIO_READY and ACTIVE_PROGRESS is not None:
                 init_web_audio(ACTIVE_PROGRESS)
+            # Any real button/input sound is also a valid browser user gesture.
+            # Make sure the background theme is running before the SFX.
+            _start_web_music()
             sound = WEB_SOUNDS.get(name)
             if sound is not None:
                 _web_play(sound, ensure_settings(ACTIVE_PROGRESS)["sfx_volume"])
