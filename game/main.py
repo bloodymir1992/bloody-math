@@ -194,13 +194,15 @@ def apply_audio_settings(progress):
     except Exception:
         pass
 
-def _web_audio_element(path, volume, loop=False):
+def _web_audio_element(filename, volume, loop=False):
+    if sys.platform != "emscripten":
+        return None
     try:
         from js import document
-        data = Path(path).read_bytes()
-        encoded = base64.b64encode(data).decode("ascii")
         audio = document.createElement("audio")
-        audio.src = f"data:audio/ogg;base64,{encoded}"
+        # /audio is copied to the GitHub Pages web root by the workflow.
+        # Relative URL keeps this working under /bloody-math/ as well.
+        audio.src = f"audio/{filename}"
         audio.preload = "auto"
         audio.loop = loop
         audio.volume = float(volume)
@@ -236,7 +238,7 @@ def init_web_audio(progress):
         settings = ensure_settings(progress)
         for name in ("move", "world_move", "select", "correct", "wrong", "hint", "boss", "victory"):
             audio = _web_audio_element(
-                Path("audio") / f"{name}.ogg",
+                f"{name}.ogg",
                 settings["sfx_volume"],
                 False
             )
@@ -244,7 +246,7 @@ def init_web_audio(progress):
                 WEB_SOUNDS[name] = audio
 
         music = _web_audio_element(
-            Path("audio") / "bloody_math_theme.ogg",
+            "bloody_math_theme.ogg",
             settings["music_volume"],
             True
         )
