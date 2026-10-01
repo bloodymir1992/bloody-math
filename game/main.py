@@ -160,6 +160,8 @@ WEB_SOUNDS = {}
 WEB_AUDIO_READY = False
 AUDIO_UNLOCKED = False
 WEB_AUDIO_EVENT_CALLBACK = None
+WEB_KEYPAD_CALLBACK = None
+WEB_KEYPAD_QUEUE = []
 
 def ensure_settings(progress):
     settings = progress.setdefault("settings", {})
@@ -228,6 +230,24 @@ def _web_user_gesture(event=None):
     except Exception:
         pass
 
+def _web_keypad_gesture(event):
+    """Capture physical Numpad digits from the browser before SDL translates them."""
+    if sys.platform != "emscripten":
+        return
+    try:
+        code = str(event.code)
+        mapping = {
+            "Numpad0": "0", "Numpad1": "1", "Numpad2": "2",
+            "Numpad3": "3", "Numpad4": "4", "Numpad5": "5",
+            "Numpad6": "6", "Numpad7": "7", "Numpad8": "8",
+            "Numpad9": "9", "NumpadDecimal": ".",
+        }
+        if code in mapping:
+            WEB_KEYPAD_QUEUE.append(mapping[code])
+            event.preventDefault()
+    except Exception:
+        pass
+
 def init_web_audio(progress):
     global WEB_AUDIO_READY, WEB_AUDIO_EVENT_CALLBACK
     if sys.platform != "emscripten":
@@ -263,6 +283,10 @@ def init_web_audio(progress):
             WEB_AUDIO_EVENT_CALLBACK = _web_user_gesture
             platform.EventTarget.addEventListener(None, "pointerdown", WEB_AUDIO_EVENT_CALLBACK)
             platform.EventTarget.addEventListener(None, "keydown", WEB_AUDIO_EVENT_CALLBACK)
+
+        if WEB_KEYPAD_CALLBACK is None:
+            WEB_KEYPAD_CALLBACK = _web_keypad_gesture
+            platform.EventTarget.addEventListener(None, "keydown", WEB_KEYPAD_CALLBACK)
 
         return WEB_AUDIO_READY
     except Exception:
@@ -340,6 +364,13 @@ def unlock_audio(progress=None):
 
 def get_events():
     events = pygame.event.get()
+    if sys.platform == "emscripten" and WEB_KEYPAD_QUEUE:
+        while WEB_KEYPAD_QUEUE:
+            value = WEB_KEYPAD_QUEUE.pop(0)
+            events.append(pygame.event.Event(
+                pygame.KEYDOWN,
+                {"key": pygame.key.key_code(value), "unicode": value}
+            ))
     if not AUDIO_UNLOCKED:
         for e in events:
             if e.type in (
