@@ -42,6 +42,11 @@ jobs:
       - name: Build WebAssembly game
         run: 'python -m pygbag --build --no_opt --width 1280 --height 800 --ume_block 1 --title "Bloody Math: Algebra Quest" game'
 
+      - name: Publish browser audio assets
+        run: |
+          mkdir -p game/build/web/audio
+          cp game/audio/*.ogg game/build/web/audio/
+
       - name: Configure Pages
         uses: actions/configure-pages@v5
 
