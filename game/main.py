@@ -381,8 +381,9 @@ def math_key_text(event):
         pygame.K_MINUS:"-", pygame.K_EQUALS:"=", pygame.K_COMMA:",",
         pygame.K_PERIOD:".", pygame.K_SLASH:"/", pygame.K_BACKSLASH:"\\",
     }
-    # Numeric keypad support. In the browser build, pygame may not populate
-    # event.unicode for keypad keys, so handle the key constants explicitly.
+    # Numeric keypad support. In browser builds, the keypad can arrive with
+    # a different keycode (especially when NumLock is off), while the physical
+    # keypad scancode remains identifiable. Handle both key and scancode.
     keypad = {
         pygame.K_KP0:"0", pygame.K_KP1:"1", pygame.K_KP2:"2",
         pygame.K_KP3:"3", pygame.K_KP4:"4", pygame.K_KP5:"5",
@@ -395,6 +396,14 @@ def math_key_text(event):
         return shifted[event.key]
     if event.key in keypad:
         return keypad[event.key]
+    try:
+        keypad_scancodes = {
+            pygame.key.get_scancode_from_key(k): v for k, v in keypad.items()
+        }
+        if getattr(event, "scancode", -1) in keypad_scancodes:
+            return keypad_scancodes[event.scancode]
+    except Exception:
+        pass
     if event.key in plain:
         return plain[event.key]
     if event.unicode and event.unicode.isprintable():
